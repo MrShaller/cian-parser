@@ -2,6 +2,10 @@
 .nvim.lua
 storage
 
+# Сохранённые браузером страницы объявлений для тестов: содержат персональные
+# данные продавца и ассеты галереи — в Git и Docker-образ не включать.
+test_data/
+
 # The rest is copied from https://github.com/github/gitignore/blob/main/Python.gitignore
 
 # Byte-compiled / optimized / DLL files

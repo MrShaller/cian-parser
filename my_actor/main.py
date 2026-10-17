@@ -1,54 +1,56 @@
-"""Module defines the main entry point for the Apify Actor.
+"""Точка входа Apify Actor: загрузка страницы объявления ЦИАН и извлечение данных.
 
-Feel free to modify this file to suit your specific needs.
-
-To build Apify Actors, utilize the Apify SDK toolkit, read more at the official documentation:
-https://docs.apify.com/sdk/python
+Вся логика извлечения — в `my_actor.parser.parse_offer_html`; этот модуль
+только получает URL из входа, загружает HTML и сохраняет результат в датасет.
 """
 
 from __future__ import annotations
 
-# Beautiful Soup - A library for pulling data out of HTML and XML files. Read more at:
-# https://www.crummy.com/software/BeautifulSoup/bs4/doc
-# Apify SDK - A toolkit for building Apify Actors. Read more at:
-# https://docs.apify.com/sdk/python
-from apify import Actor
-from bs4 import BeautifulSoup
-
-# HTTPX2 - A library for making asynchronous HTTP requests in Python. Read more at:
-# https://github.com/pydantic/httpx2
+from apify import Actor, Event
 from httpx2 import AsyncClient
+
+from .parser import parse_offer_html
 
 
 async def main() -> None:
-    """Define a main entry point for the Apify Actor.
-
-    This coroutine is executed using `asyncio.run()`, so it must remain an asynchronous function for proper execution.
-    Asynchronous execution is required for communication with Apify platform, and it also enhances performance in
-    the field of web scraping significantly.
-    """
     async with Actor:
-        # Retrieve the input object for the Actor. The structure of input is defined in input_schema.json.
-        actor_input = await Actor.get_input() or {'url': 'https://apify.com/'}
+        async def on_aborting() -> None:
+            Actor.log.info('Получен сигнал прерывания: завершаемся.')
+            await Actor.exit()
+
+        Actor.on(Event.ABORTING, on_aborting)
+
+        actor_input = await Actor.get_input() or {}
         url = actor_input.get('url')
         if not url:
             raise ValueError('Missing "url" attribute in input!')
 
-        # Create an asynchronous HTTPX2 client for making HTTP requests.
-        async with AsyncClient() as client:
-            # Fetch the HTML content of the page, following redirects if necessary.
+        # Прокси включается только явным чекбоксом «Use Apify Proxy» или списком proxyUrls:
+        # вызов create_proxy_configuration без этого условия при пустом входе включил бы
+        # автоматический Apify Proxy.
+        proxy_input = actor_input.get('proxyConfiguration') or {}
+        proxy_configuration = None
+        if proxy_input.get('useApifyProxy', False) or proxy_input.get('proxyUrls'):
+            proxy_configuration = await Actor.create_proxy_configuration(actor_proxy_input=proxy_input)
+
+        proxy_url = await proxy_configuration.new_url() if proxy_configuration else None
+        if proxy_url:
+            groups = ', '.join(proxy_input.get('apifyProxyGroups') or ['AUTO'])
+            Actor.log.info(f'Using Apify Proxy (groups: {groups})')
+        else:
+            Actor.log.info('Proxy is disabled, connecting directly')
+
+        async with AsyncClient(proxy=proxy_url) as client:
             Actor.log.info(f'Sending a request to {url}')
             response = await client.get(url, follow_redirects=True)
 
-        # Parse the HTML content using Beautiful Soup and lxml parser.
-        soup = BeautifulSoup(response.content, 'lxml')
+        response.raise_for_status()
 
-        # Extract all headings from the page (tag name and text).
-        headings = []
-        for heading in soup.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'h6']):
-            heading_object = {'level': heading.name, 'text': heading.text}
-            Actor.log.info(f'Extracted heading: {heading_object}')
-            headings.append(heading_object)
+        offer = parse_offer_html(response.text, source_url=str(response.url) if response.url else url)
+        Actor.log.info(
+            f'Parsed offer {offer.get("offer_id")}: '
+            f'{len(offer.get("photo_urls", []))} photos, price {offer.get("price")}'
+        )
 
-        # Save the extracted headings to the dataset, which is a table-like storage.
-        await Actor.push_data(headings)
+        # Одно объявление — одна запись в датасете.
+        await Actor.push_data([offer])

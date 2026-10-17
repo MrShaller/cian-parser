@@ -1,22 +1,112 @@
 {
     "$schema": "https://apify.com/schemas/v1/dataset.ide.json",
     "actorSpecification": 1,
-    "fields": {},
+    "fields": {
+        "type": "object",
+        "properties": {
+            "url": { "type": "string", "title": "URL объявления" },
+            "offer_id": { "type": "integer", "title": "ID объявления" },
+            "title": { "type": ["string", "null"], "title": "Заголовок" },
+            "price": { "type": ["integer", "null"], "title": "Цена" },
+            "price_currency": { "type": ["string", "null"], "title": "Валюта" },
+            "price_per_meter": { "type": ["integer", "null"], "title": "Цена за м²" },
+            "address": {
+                "type": "object",
+                "title": "Адрес",
+                "properties": {
+                    "full": { "type": ["string", "null"], "title": "Полный адрес" },
+                    "city": { "type": ["string", "null"], "title": "Город" },
+                    "district": { "type": ["string", "null"], "title": "Район" },
+                    "okrug": { "type": ["string", "null"], "title": "Округ" },
+                    "street": { "type": ["string", "null"], "title": "Улица" },
+                    "house_number": { "type": ["string", "null"], "title": "Дом" }
+                }
+            },
+            "coordinates": {
+                "type": ["object", "null"],
+                "title": "Координаты",
+                "properties": {
+                    "lat": { "type": "number", "title": "Широта" },
+                    "lng": { "type": "number", "title": "Долгота" }
+                }
+            },
+            "residential_complex": { "type": ["string", "null"], "title": "ЖК" },
+            "photo_urls": { "type": "array", "title": "URL фотографий" },
+            "floor_plan_url": { "type": ["string", "null"], "title": "URL планировки" },
+            "flat": {
+                "type": "object",
+                "title": "О квартире",
+                "properties": {
+                    "housing_type": { "type": ["string", "null"], "title": "Тип жилья" },
+                    "total_area": { "type": ["number", "null"], "title": "Общая площадь" },
+                    "living_area": { "type": ["number", "null"], "title": "Жилая площадь" },
+                    "kitchen_area": { "type": ["number", "null"], "title": "Площадь кухни" },
+                    "floor": { "type": ["integer", "null"], "title": "Этаж" },
+                    "floors_total": { "type": ["integer", "null"], "title": "Этажность" },
+                    "ceiling_height": { "type": ["number", "null"], "title": "Высота потолков" },
+                    "bathroom": { "type": ["string", "null"], "title": "Санузел" },
+                    "balcony": { "type": ["string", "null"], "title": "Балкон/лоджия" },
+                    "windows_view": { "type": ["string", "null"], "title": "Вид из окон" },
+                    "renovation": { "type": ["string", "null"], "title": "Ремонт" },
+                    "rooms_count": { "type": ["integer", "null"], "title": "Комнат" },
+                    "is_apartments": { "type": ["boolean", "null"], "title": "Апартаменты" }
+                }
+            },
+            "building": {
+                "type": "object",
+                "title": "О доме",
+                "properties": {
+                    "build_year": { "type": ["integer", "null"], "title": "Год постройки" },
+                    "floors_count": { "type": ["integer", "null"], "title": "Этажей" },
+                    "ceiling_height": { "type": ["number", "null"], "title": "Высота потолков" },
+                    "parking": { "type": ["string", "null"], "title": "Парковка" },
+                    "heating": { "type": ["string", "null"], "title": "Отопление" },
+                    "overlap_type": { "type": ["string", "null"], "title": "Тип перекрытий" },
+                    "emergency": { "type": ["string", "null"], "title": "Аварийность" },
+                    "lift_types": { "type": "array", "title": "Лифты" },
+                    "cranage_types": { "type": "array", "title": "Краны" }
+                }
+            },
+            "about_flat_raw": { "type": "object", "title": "О квартире (как на странице)" },
+            "about_building_raw": { "type": "object", "title": "О доме (как на странице)" },
+            "description": { "type": ["string", "null"], "title": "Описание" },
+            "metro": { "type": "array", "title": "Метро" },
+            "created_at": { "type": ["string", "null"], "title": "Дата создания" },
+            "edited_at": { "type": ["string", "null"], "title": "Дата изменения" },
+            "parsed_at": { "type": "string", "title": "Время парсинга" }
+        }
+    },
     "views": {
         "overview": {
             "title": "Overview",
             "transformation": {
-                "fields": ["level", "text"]
+                "fields": ["url", "offer_id", "title", "price", "residential_complex", "parsed_at"]
             },
             "display": {
                 "component": "table",
                 "properties": {
-                    "level": {
-                        "label": "Level",
+                    "url": {
+                        "label": "URL",
                         "format": "text"
                     },
-                    "text": {
-                        "label": "Text",
+                    "offer_id": {
+                        "label": "ID",
+                        "format": "text"
+                    },
+                    "title": {
+                        "label": "Заголовок",
+                        "format": "text"
+                    },
+                    "price": {
+                        "label": "Цена",
+                        "format": "number"
+                    },
+                    "residential_complex": {
+                        "label": "ЖК",
+                        "format": "text"
+                    },
+                    "parsed_at": {
+                        "label": "Время парсинга",
                         "format": "text"
                     }
                 }

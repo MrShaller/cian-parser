@@ -1,14 +1,14 @@
 {
     "$schema": "https://apify.com/schemas/v1/actor.ide.json",
     "actorSpecification": 1,
-    "name": "my-actor",
-    "title": "Scrape single page in Python",
-    "description": "Scrape data from single page with provided URL.",
+    "name": "cian-parser",
+    "title": "Cian.ru offer parser",
+    "description": "Извлекает структурированные данные из страницы объявления ЦИАН: цену, адрес, характеристики квартиры и дома, фото, метро, описание.",
     "version": "0.0",
     "buildTag": "latest",
     "meta": {
         "templateId": "python-start",
-        "generatedBy": "<FILL-IN-MODEL>"
+        "generatedBy": "ZCode with GLM-5.3-Flash"
     },
     "inputSchema": "./input_schema.json",
     "outputSchema": "./output_schema.json",

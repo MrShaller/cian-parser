@@ -1,86 +1,186 @@
-## Scrape single-page in Python template
+# Cian.ru offer parser
 
-<!-- This is an Apify template readme -->
+Apify Actor, который загружает страницу одного объявления ЦИАН по URL и сохраняет
+структурированные данные в Dataset: цена, адрес, координаты, характеристики
+квартиры и дома, фотографии, метро, описание.
 
-A template for [web scraping](https://apify.com/web-scraping) data from a single web page in Python. The URL of the web page is passed in via input, which is defined by the [input schema](https://docs.apify.com/platform/actors/development/input-schema). The template uses the [HTTPX2](https://github.com/pydantic/httpx2) to get the HTML of the page and the [Beautiful Soup](https://www.crummy.com/software/BeautifulSoup/bs4/doc/) to parse the data from it. The data are then stored in a [dataset](https://docs.apify.com/sdk/python/docs/concepts/storages#working-with-datasets) where you can easily access them.
+Загрузку страницы выполняет [HTTPX2](https://github.com/pydantic/httpx2),
+извлечение данных — собственный модуль `my_actor/parser.py` на
+[Beautiful Soup](https://www.crummy.com/software/BeautifulSoup/bs4/doc/).
 
-The scraped data in this template are page headings but you can easily edit the code to scrape whatever you want from the page.
+## Что делает Actor
 
-## Included features
+1. Читает вход: URL страницы объявления (обязательное поле `url`).
+2. Выполняет один GET-запрос по этому URL (`follow_redirects`, ошибки HTTP
+   приводят к падению запуска).
+3. Извлекает данные функцией `parse_offer_html()`. Основной источник —
+   встроенное состояние микросервиса `frontend-offer-card`
+   (`window._cianConfig['frontend-offer-card']` → `defaultState` →
+   `offerData.offer`, `offerData.features`, `offerData.bti`); из DOM берётся
+   только заголовок `<h1>`. Значения, которых нет на странице, возвращаются
+   как `null` и никогда не додумываются.
+4. Сохраняет одну запись в Dataset (`Actor.push_data([offer])`).
 
-- **[Apify SDK](https://docs.apify.com/sdk/python/)** for Python - a toolkit for building Apify [Actors](https://apify.com/actors) and scrapers in Python
-- **[Input schema](https://docs.apify.com/platform/actors/development/input-schema)** - define and easily validate a schema for your Actor's input
-- **[Request queue](https://docs.apify.com/sdk/python/docs/concepts/storages#working-with-request-queues)** - queues into which you can put the URLs you want to scrape
-- **[Dataset](https://docs.apify.com/sdk/python/docs/concepts/storages#working-with-datasets)** - store structured data where each object stored has the same attributes
-- **[HTTPX2](https://github.com/pydantic/httpx2)** - library for making asynchronous HTTP requests in Python
-- **[Beautiful Soup](https://www.crummy.com/software/BeautifulSoup/bs4/doc/)** - library for pulling data out of HTML and XML files
+Сейчас поддержан сценарий «одно объявление за запуск» (проверено на страницах
+`cian.ru/<deal_type>/<offer_type>/<id>/`): обход поисковой выдачи, пагинация
+и обработка капчи не реализованы — страница капчи или другой раздел ЦИАН
+приводит к ошибке `ParseError` с понятным сообщением.
 
-## How it works
+## Требования и установка
 
-1. `Actor.get_input()` gets the input where the page URL is defined
-2. `httpx2.AsyncClient().get(url)` fetches the page
-3. `BeautifulSoup(response.content, 'lxml')` loads the page data and enables parsing the headings
-4. This parses the headings from the page and here you can edit the code to parse whatever you need from the page
-    ```python
-    for heading in soup.find_all(["h1", "h2", "h3", "h4", "h5", "h6"]):
-    ```
-5. `Actor.push_data(headings)` stores the headings in the dataset
+- **Python ≥ 3.11** — минимальная версия пакета `apify` 4.x (локально
+  проверено на 3.14; на платформе Actor работает в образе
+  `apify/actor-python:3.14`).
+- **Node.js LTS и Apify CLI** — для локальных запусков и валидации схем
+  (`npm install -g apify-cli`).
 
-## Resources
+Зависимости проекта описаны в `requirements.txt`: `apify` ^4.0,
+`beautifulsoup4[lxml]` ^4.0, `httpx2` ^2.5, `types-beautifulsoup4` ^4.0.
 
-- [BeautifulSoup Scraper](https://apify.com/apify/beautifulsoup-scraper)
-- [Python tutorials in Academy](https://docs.apify.com/academy/python)
-- [Web scraping with Beautiful Soup and Requests](https://blog.apify.com/web-scraping-with-beautiful-soup/)
-- [Beautiful Soup vs. Scrapy for web scraping](https://blog.apify.com/beautiful-soup-vs-scrapy-web-scraping/)
-- [Integration with Make, GitHub, Zapier, Google Drive, and other apps](https://apify.com/integrations)
-- [Video guide on getting scraped data using Apify API](https://www.youtube.com/watch?v=ViYYDHSBAKM)
-- A short guide on how to build web scrapers using code templates:
+```bash
+python -m venv .venv
+source .venv/bin/activate        # Windows Git Bash; в PowerShell: .venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
 
-[web scraper template](https://www.youtube.com/watch?v=u-i-Korzf8w)
+## Входные данные
 
+Форма входа строится из `.actor/input_schema.json`.
 
-## Getting started
+| Поле | Тип | Описание |
+| --- | --- | --- |
+| `url` | string, обязателен | URL страницы объявления, например `https://spb.cian.ru/sale/flat/308497101/` |
+| `proxyConfiguration` | object, по умолчанию выключен | штатная настройка Apify Proxy (см. ниже) |
 
-For complete information [see this article](https://docs.apify.com/platform/actors/development#build-actor-at-apify-console). In short, you will:
+Минимальный ввод:
 
-1. Build the Actor
-2. Run the Actor
+```json
+{
+    "url": "https://spb.cian.ru/sale/flat/308497101/"
+}
+```
 
-## Pull the Actor for local development
+## Запуск локально через Apify CLI
 
-If you would like to develop locally, you can pull the existing Actor from Apify console using Apify CLI:
+```bash
+apify run
+```
 
-1. Install `apify-cli`
+Локальный ввод кладётся в `storage/key_value_stores/default/INPUT.json`
+(создаётся по input schema), результаты появляются в
+`storage/datasets/default/` по одному JSON на объявление. Локальное
+хранилище `storage/` не синхронизируется с Apify Console — вывод платформенного
+запуска проверяется в Console.
 
-    **Using Homebrew**
+Для отладки парсера без сети и без Actor можно разобрать сохранённый HTML
+напрямую:
 
-    ```bash
-    brew install apify-cli
-    ```
+```bash
+python -m my_actor.parse_local test_data/cian_308497101.html
+```
 
-    **Using NPM**
+## Apify Proxy: включение и выключение
 
-    ```bash
-    npm -g install apify-cli
-    ```
+Прокси управляется полем `proxyConfiguration` во входе, код менять не нужно.
 
-2. Pull the Actor by its unique `<ActorId>`, which is one of the following:
-    - unique name of the Actor to pull (e.g. "apify/hello-world")
-    - or ID of the Actor to pull (e.g. "E2jjCZBezvAZnX8Rb")
+- **Выключено (по умолчанию).** Чекбокс «Use Apify Proxy» снят — Actor ходит
+  по URL напрямую с IP машины, где запущен.
+- **Включено.** Отметьте «Use Apify Proxy» и при необходимости выберите группу
+  (`RESIDENTIAL`, `UNBLOCKER`), страну и/или список собственных прокси
+  (`proxyUrls`). Группа выбирается на каждый запуск в интерфейсе, в коде она
+  не зашита. Пароль прокси на платформе подставляется автоматически.
 
-    You can find both by clicking on the Actor title at the top of the page, which will open a modal containing both Actor unique name and Actor ID.
+В логе запуска видно, какой режим выбран: `Proxy is disabled, connecting
+directly` или `Using Apify Proxy (groups: …)`.
 
-    This command will copy the Actor into the current directory on your local machine.
+> **Предупреждение для локальных запусков.** Apify Proxy требует авторизации:
+> выполните `apify login` или задайте `APIFY_TOKEN` / `APIFY_PROXY_PASSWORD`.
+> Если включить прокси локально без авторизации, запуск завершится ошибкой —
+> Actor намеренно не «тихо» переключается на прямые запросы. На платформе
+> (Apify Console, scheduled/API-запуски) авторизация не требуется.
 
-    ```bash
-    apify pull <ActorId>
-    ```
+Расход и актуальные цены прокси (RESIDENTIAL — за гигабайт трафика, UNBLOCKER —
+за успешные запросы) видны в Apify Console на странице Proxy и на
+[странице тарифов](https://apify.com/pricing).
 
-## Documentation reference
+## Какие данные извлекаются
 
-To learn more about Apify and Actors, take a look at the following resources:
+Каждый запуск добавляет в Dataset одну запись со следующими полями
+(полное описание — в `.actor/dataset_schema.json`):
 
-- [Apify SDK for JavaScript documentation](https://docs.apify.com/sdk/js)
-- [Apify SDK for Python documentation](https://docs.apify.com/sdk/python)
-- [Apify Platform documentation](https://docs.apify.com/platform)
-- [Join our developer community on Discord](https://discord.com/invite/jyEM2PRvMU)
+- **Объявление:** `url`, `offer_id`, `title`, `price`, `price_currency`,
+  `price_per_meter`, `residential_complex`, `description`, `photo_urls`,
+  `floor_plan_url`, `metro` (список `{name, travel_time_min, travel_type}`),
+  `created_at`, `edited_at`, `parsed_at` (ISO-8601 UTC).
+- **`address`:** `full`, `city`, `district`, `okrug`, `street`, `house_number`.
+- **`coordinates`:** `{lat, lng}` или `null`.
+- **`flat`:** тип жилья, общая/жилая/кухонная площадь, этаж, потолки, санузел,
+  балкон/лоджия, вид из окон, ремонт, комнаты, признак апартаментов.
+- **`building`:** год постройки, этажность, потолки, парковка, отопление,
+  перекрытия, аварийность, лифты, краны.
+- **`about_flat_raw`, `about_building_raw`:** разделы «О квартире» и «О доме»
+  в том виде, как их показывает страница.
+
+В Console результаты видны на вкладке Output (таблица `overview`: url,
+offer_id, title, price, residential_complex, parsed_at); полный датасет
+доступен по ссылке из Output schema и через API.
+
+Усечённый пример записи (значения выверены тестами на сохранённой странице):
+
+```json
+{
+    "url": "https://spb.cian.ru/sale/flat/308497101/",
+    "offer_id": 308497101,
+    "title": "Продается 3-комн. квартира, 79,6 м²",
+    "price": 33000000,
+    "price_currency": "rur",
+    "residential_complex": "Promenade (Променад)",
+    "parsed_at": "…время запуска в ISO-8601 UTC…"
+}
+```
+
+## Ограничения парсера
+
+Ниже — только подтверждённые кодом и тестами ограничения
+(`tests/test_parser.py`):
+
+- **Планировки.** `floor_plan_url` заполняется только если ЦИАН отдал
+  планировки в `offer.cianLayouts` с явным `fullUrl`. Среди обычных фотографий
+  планировки не маркируются, а в сохранённом примере `cianLayouts` был `null`,
+  поэтому поле остаётся `null` — планировка не выдумывается
+  (`test_floor_plan_not_invented`).
+- **Жилая площадь.** Берётся из раздела «О квартире» либо из `areaParts`;
+  если данных нет — `null`, а не 0 и не общая площадь
+  (`test_living_area_absent_not_invented`).
+- **Метро.** Способ передвижения (`travel_type`) указывается только для
+  значений `walk`/`transport`, иначе `null`.
+- **Адрес.** Адресные элементы неизвестных типов игнорируются, чтобы значения
+  разных уровней не смешивались (`test_address_parts_not_mixed`).
+- **Аварийность дома** — из данных БТИ (`isEmergency`): «Да»/«Нет», при
+  отсутствии данных — `null`.
+- **Чужой HTML.** Если в странице нет состояния объявления (капча, другой
+  раздел сайта), парсер raises `ParseError`
+  (`test_parse_error_on_foreign_html`).
+
+## Проверки
+
+```bash
+python -m unittest discover          # 14 тестов
+python -m compileall my_actor tests  # синтаксис и компилируемость
+apify validate-schema                # input и dataset схемы Apify
+```
+
+Одиннадцать тестов проверяют точные значения на сохранённой копии страницы
+`test_data/cian_308497101.html`; три — вспомогательные функции. На свежем
+клоне без этой папки 11 тестов пропускаются (`skipUnless`), 3 выполняются.
+
+Папка `test_data/` содержит персональные данные продавца и исключена из Git
+и Docker-образа через `.gitignore`/`.dockerignore` — не добавляйте её в
+коммиты и не включайте в сборку.
+
+## Документация
+
+- [Apify SDK для Python](https://docs.apify.com/sdk/python)
+- [Apify Proxy](https://docs.apify.com/platform/proxy)
+- [Input schema](https://docs.apify.com/platform/actors/development/actor-definition/input-schema/specification/v1)
+- [Dataset schema](https://docs.apify.com/platform/actors/development/actor-definition/dataset-schema)
