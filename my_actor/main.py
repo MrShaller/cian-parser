@@ -102,6 +102,10 @@ async def main() -> None:
             max_requests_per_crawl=1,
             max_request_retries=0,
             navigation_timeout=timedelta(minutes=2),
+            # Все данные парсера лежат в SSR-HTML документа (defaultState и <h1>),
+            # поэтому ждём только разбор документа, а не загрузку скриптов и стилей:
+            # событие load через residential-прокси тянет 35-40 секунд.
+            goto_options={'wait_until': 'domcontentloaded'},
         )
 
         # Необязательные подресурсы (картинки, медиа, шрифты) не скачиваются: парсер
