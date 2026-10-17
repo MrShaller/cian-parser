@@ -8,13 +8,25 @@
 
 from __future__ import annotations
 
+import os
 from datetime import timedelta
 from typing import Any
 
 from apify import Actor, Event
-from crawlee.crawlers import PlaywrightCrawler, PlaywrightCrawlingContext
+from crawlee.crawlers import (
+    PlaywrightCrawler,
+    PlaywrightCrawlingContext,
+    PlaywrightPreNavCrawlingContext,
+)
 
 from .parser import ParseError, parse_offer_html
+from .resource_blocking import (
+    BLOCKED_RESOURCE_TYPES_ENV_VAR,
+    ROUTE_PATTERN,
+    ResourceTally,
+    blocked_resource_types,
+    make_route_handler,
+)
 
 # Признаки CAPTCHA или ограничения доступа; ищутся в тексте ответа без учёта регистра.
 _ACCESS_MARKERS = ("captcha", "access denied", "доступ ограничен", "проверка браузера")
@@ -92,6 +104,26 @@ async def main() -> None:
             navigation_timeout=timedelta(minutes=2),
         )
 
+        # Необязательные подресурсы (картинки, медиа, шрифты) не скачиваются: парсер
+        # читает только HTML документа, а прерванные запросы не проходят через прокси.
+        # Набор настраивается переменной окружения CIAN_BLOCKED_RESOURCE_TYPES
+        # (пустое значение отключает блокировку).
+        blocked_types = blocked_resource_types()
+        blocked_tally: ResourceTally = {}
+        if blocked_types:
+            async def install_route_filter(context: PlaywrightPreNavCrawlingContext) -> None:
+                await context.page.route(
+                    ROUTE_PATTERN, make_route_handler(blocked_types, blocked_tally)
+                )
+
+            crawler.pre_navigation_hook(install_route_filter)
+            Actor.log.info(f'Blocking optional subresource types: {", ".join(blocked_types)}')
+        else:
+            Actor.log.info(
+                f'Resource blocking disabled via {BLOCKED_RESOURCE_TYPES_ENV_VAR}'
+                f' (os.environ has {os.environ.get(BLOCKED_RESOURCE_TYPES_ENV_VAR)!r})'
+            )
+
         # Результат передаётся через словарь: исключение должно выйти из main() (и уронить
         # Actor с прежним кодом 91), а не погаситься внутри crawler'а как ошибка запроса.
         outcome: dict[str, Any] = {}
@@ -122,6 +154,10 @@ async def main() -> None:
                 ))
 
         await crawler.run([url])
+
+        if blocked_types:
+            blocked_total = sum(blocked_tally.values())
+            Actor.log.info(f'Aborted {blocked_total} optional subresource requests: {blocked_tally}')
 
         if 'error' in outcome:
             raise outcome['error']
